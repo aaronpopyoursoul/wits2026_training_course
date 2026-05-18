@@ -35,8 +35,7 @@ export const useCartStore = defineStore('cart', () => {
    */
   const calcTotal = computed(() => {
     const subtotal = items.value.reduce(
-      (sum, item) => sum + item.product.price, // ← BUG: 應為 * item.quantity
-      0
+      (sum, item) => sum + item.product.price * item.quantity, // ← 已修復BUG
     )
     const shippingFee = subtotal >= 49000 ? 0 : 6000  // 單位：分；滿 490 元免運
     return {

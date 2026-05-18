@@ -35,7 +35,7 @@ export const useCartStore = defineStore('cart', () => {
    */
   const calcTotal = computed(() => {
     const subtotal = items.value.reduce(
-      (sum, item) => sum + item.product.price, // ← BUG: 應為 * item.quantity
+      (sum, item) => sum + item.product.price * item.quantity, // ← BUG: 應為 * item.quantity /Fix By sam 115/5/18
       0
     )
     const shippingFee = subtotal >= 49000 ? 0 : 6000  // 單位：分；滿 490 元免運
@@ -51,6 +51,7 @@ export const useCartStore = defineStore('cart', () => {
   // --- Actions ---
 
   /** 加入商品到購物車，若已存在則增加數量 */
+  /**2026.5.18TEST */
   function addItem(product: Product, quantity: number = 1): void {
     const existing = items.value.find(item => item.product.id === product.id)
 

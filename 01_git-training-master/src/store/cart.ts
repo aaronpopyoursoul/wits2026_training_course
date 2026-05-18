@@ -51,7 +51,7 @@ export const useCartStore = defineStore('cart', () => {
   // --- Actions ---
 
   /** 加入商品到購物車，若已存在則增加數量 */
-  /**2026.5.18TEST */
+  /**2026.5.18 TEST */
   function addItem(product: Product, quantity: number = 1): void {
     const existing = items.value.find(item => item.product.id === product.id)
 

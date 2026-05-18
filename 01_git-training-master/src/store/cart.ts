@@ -1,6 +1,6 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { CartItem, Product, Order, ShippingAddress } from '@/types'
+import { defineStore } from "pinia";
+import { ref, computed } from "vue";
+import type { CartItem, Product, Order, ShippingAddress } from "@/types";
 
 // ================================================================
 // cart store — 管理購物車狀態
@@ -14,15 +14,15 @@ import type { CartItem, Product, Order, ShippingAddress } from '@/types'
 // 再合併回 main，然後將修復同步到 feature/cart-logic。
 // ================================================================
 
-export const useCartStore = defineStore('cart', () => {
+export const useCartStore = defineStore("cart", () => {
   // --- State ---
-  const items = ref<CartItem[]>([])
-  const isCheckingOut = ref(false)
+  const items = ref<CartItem[]>([]);
+  const isCheckingOut = ref(false);
 
   // --- Getters ---
   const itemCount = computed(() =>
-    items.value.reduce((total, item) => total + item.quantity, 0)
-  )
+    items.value.reduce((total, item) => total + item.quantity, 0),
+  );
 
   /**
    * 計算購物車金額
@@ -35,69 +35,74 @@ export const useCartStore = defineStore('cart', () => {
    */
   const calcTotal = computed(() => {
     const subtotal = items.value.reduce(
-      (sum, item) => sum + item.product.price, // ← BUG: 應為 * item.quantity
-      0
-    )
-    const shippingFee = subtotal >= 49000 ? 0 : 6000  // 單位：分；滿 490 元免運
+      (sum, item) => sum + item.product.price * item.quantity, // ← BUG: 應為 * item.quantity
+      0,
+    );
+    const shippingFee = subtotal >= 49000 ? 0 : 6000; // 單位：分；滿 490 元免運
     return {
       subtotal,
       shippingFee,
-      total: subtotal + shippingFee
-    }
-  })
+      total: subtotal + shippingFee,
+    };
+  });
 
-  const isEmpty = computed(() => items.value.length === 0)
+  const isEmpty = computed(() => items.value.length === 0);
 
   // --- Actions ---
 
   /** 加入商品到購物車，若已存在則增加數量 */
   function addItem(product: Product, quantity: number = 1): void {
-    const existing = items.value.find(item => item.product.id === product.id)
+    const existing = items.value.find((item) => item.product.id === product.id);
 
     if (existing) {
-      existing.quantity = Math.min(existing.quantity + quantity, product.stock)
+      existing.quantity = Math.min(existing.quantity + quantity, product.stock);
     } else {
-      items.value.push({ product, quantity: Math.min(quantity, product.stock) })
+      items.value.push({
+        product,
+        quantity: Math.min(quantity, product.stock),
+      });
     }
   }
 
   /** 移除購物車中的商品 */
   function removeItem(productId: string): void {
-    const index = items.value.findIndex(item => item.product.id === productId)
+    const index = items.value.findIndex(
+      (item) => item.product.id === productId,
+    );
     if (index !== -1) {
-      items.value.splice(index, 1)
+      items.value.splice(index, 1);
     }
   }
 
   /** 更新商品數量；若數量為 0 則移除 */
   function updateQuantity(productId: string, quantity: number): void {
     if (quantity <= 0) {
-      removeItem(productId)
-      return
+      removeItem(productId);
+      return;
     }
 
-    const item = items.value.find(i => i.product.id === productId)
+    const item = items.value.find((i) => i.product.id === productId);
     if (item) {
-      item.quantity = Math.min(quantity, item.product.stock)
+      item.quantity = Math.min(quantity, item.product.stock);
     }
   }
 
   /** 清空購物車 */
   function clearCart(): void {
-    items.value = []
+    items.value = [];
   }
 
   /** 結帳：建立訂單（模擬 API 呼叫） */
   async function checkout(
     userId: string,
-    shippingAddress: ShippingAddress
+    shippingAddress: ShippingAddress,
   ): Promise<Order | null> {
-    if (isEmpty.value) return null
+    if (isEmpty.value) return null;
 
-    isCheckingOut.value = true
+    isCheckingOut.value = true;
 
     try {
-      const { subtotal, shippingFee, total } = calcTotal.value
+      const { subtotal, shippingFee, total } = calcTotal.value;
 
       const order: Order = {
         id: `ord_${Date.now()}`,
@@ -106,19 +111,19 @@ export const useCartStore = defineStore('cart', () => {
         subtotal,
         shippingFee,
         total,
-        status: 'pending',
+        status: "pending",
         shippingAddress,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
+        updatedAt: new Date().toISOString(),
+      };
 
       // 模擬 API 延遲
-      await new Promise(resolve => setTimeout(resolve, 800))
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
-      clearCart()
-      return order
+      clearCart();
+      return order;
     } finally {
-      isCheckingOut.value = false
+      isCheckingOut.value = false;
     }
   }
 
@@ -132,6 +137,6 @@ export const useCartStore = defineStore('cart', () => {
     removeItem,
     updateQuantity,
     clearCart,
-    checkout
-  }
-})
+    checkout,
+  };
+});

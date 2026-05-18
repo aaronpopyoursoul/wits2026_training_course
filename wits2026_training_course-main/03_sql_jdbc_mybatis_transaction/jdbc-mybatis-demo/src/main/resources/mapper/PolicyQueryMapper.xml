@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.training.jdbcdemo.mapper.PolicyQueryMapper">
+
+    <select id="findPolicyFinancialSummary" parameterType="string" resultType="com.company.training.jdbcdemo.model.PolicyFinancialSummary">
+        select
+            p.policy_no,
+            ph.holder_name as policy_holder_name,
+            p.policy_status,
+            p.product_code,
+            cast(max(pr.payment_date) as char) as last_payment_date,
+            count(distinct case when cc.claim_status in ('PENDING', 'UNDER_REVIEW') then cc.claim_no end) as open_claim_count
+        from policy p
+        inner join policy_holder ph on ph.id = p.holder_id
+        left join payment_record pr on pr.policy_no = p.policy_no
+        left join claim_case cc on cc.policy_no = p.policy_no
+        where p.policy_no = #{policyNo}
+        group by p.policy_no, ph.holder_name, p.policy_status, p.product_code
+    </select>
+
+</mapper>

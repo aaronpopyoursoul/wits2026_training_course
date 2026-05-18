@@ -1,0 +1,28 @@
+{
+  "name": "training-rest-jwt-demo-local",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082",
+      "enabled": true
+    },
+    {
+      "key": "username",
+      "value": "trainer",
+      "enabled": true
+    },
+    {
+      "key": "password",
+      "value": "P@ssw0rd123",
+      "enabled": true
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2026-05-11T00:00:00.000Z",
+  "_postman_exported_using": "GitHub Copilot"
+}

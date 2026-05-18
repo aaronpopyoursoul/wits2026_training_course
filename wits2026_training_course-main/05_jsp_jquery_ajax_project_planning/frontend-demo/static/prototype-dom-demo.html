@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>Prototype.js DOM Demo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prototype/1.7.3/prototype.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 24px; }
+        .panel { border: 1px solid #d0d7de; padding: 16px; border-radius: 8px; max-width: 680px; }
+        .notice { margin-top: 12px; padding: 12px; background: #eef6ff; border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <div class="panel">
+        <h1>Prototype.js DOM 操作示範</h1>
+        <p>這個頁面用來展示舊式頁面互動寫法，不負責真實 API 串接。</p>
+        <button id="toggleButton" type="button">切換提示內容</button>
+        <div id="noticePanel" class="notice">Prototype.js 常出現在舊型企業專案，用來做 selector、事件與 Ajax.Request。</div>
+    </div>
+
+    <script>
+        document.observe('dom:loaded', function () {
+            $('toggleButton').observe('click', function () {
+                $('noticePanel').toggle();
+            });
+        });
+    </script>
+</body>
+</html>

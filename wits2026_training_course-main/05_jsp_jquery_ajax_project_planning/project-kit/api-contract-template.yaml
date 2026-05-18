@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Project API Draft
+  version: 0.1.0
+  description: 初版專題 API 契約草案
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/example/login:
+    post:
+      summary: 使用者登入
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: 登入成功
+        '401':
+          description: 驗證失敗
+  /api/example/items:
+    get:
+      summary: 查詢資料列表
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 查詢成功
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

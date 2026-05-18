@@ -1,0 +1,38 @@
+# OS files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Editor temp files
+*.swp
+*.swo
+
+# IDE files
+**/.idea/
+**/*.iml
+
+# Ignore most VS Code metadata, but keep the teaching instruction file in Module 01.
+**/.vscode/*
+!01_git-training-master/.vscode/
+!01_git-training-master/.vscode/instructions.md
+
+# Java / Maven
+**/target/
+**/.classpath
+**/.project
+**/.factorypath
+**/.springBeans
+
+# Node / frontend build outputs
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/coverage/
+**/.quasar/
+**/*.tsbuildinfo
+**/*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local

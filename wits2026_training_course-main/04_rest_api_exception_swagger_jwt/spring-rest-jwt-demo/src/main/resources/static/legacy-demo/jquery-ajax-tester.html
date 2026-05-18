@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>jQuery AJAX Tester</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 24px; }
+        .layout { display: grid; gap: 16px; max-width: 760px; }
+        .card { border: 1px solid #d0d7de; padding: 16px; border-radius: 8px; }
+        input, button { padding: 8px; margin-right: 8px; }
+        pre { background: #0d1117; color: #c9d1d9; padding: 12px; border-radius: 6px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <div class="card">
+            <h1>jQuery AJAX API 測試頁</h1>
+            <p>此頁面由 04 專案同源提供，可直接測試舊系統補接 API 的維運情境。</p>
+            <div>
+                <label>Username <input id="username" value="trainer"></label>
+                <label>Password <input id="password" type="password" value="P@ssw0rd123"></label>
+                <button id="loginButton" type="button">登入取得 Token</button>
+            </div>
+            <div>
+                <label>Policy No <input id="policyNo" value="POL20260001"></label>
+                <button id="policyButton" type="button">查詢保單摘要</button>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Response</h2>
+            <pre id="responsePanel">尚未發送請求</pre>
+        </div>
+    </div>
+
+    <script>
+        var accessToken = '';
+
+        function renderResponse(payload) {
+            $('#responsePanel').text(JSON.stringify(payload, null, 2));
+        }
+
+        $('#loginButton').on('click', function () {
+            $.ajax({
+                url: '/api/auth/login',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    username: $('#username').val(),
+                    password: $('#password').val()
+                })
+            }).done(function (data) {
+                accessToken = data.accessToken;
+                renderResponse(data);
+            }).fail(function (xhr) {
+                renderResponse(xhr.responseJSON || { message: 'Request failed' });
+            });
+        });
+
+        $('#policyButton').on('click', function () {
+            $.ajax({
+                url: '/api/policies/' + $('#policyNo').val() + '/summary',
+                method: 'GET',
+                headers: {
+                    Authorization: 'Bearer ' + accessToken
+                }
+            }).done(function (data) {
+                renderResponse(data);
+            }).fail(function (xhr) {
+                renderResponse(xhr.responseJSON || { message: 'Request failed' });
+            });
+        });
+    </script>
+</body>
+</html>

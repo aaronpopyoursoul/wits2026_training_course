@@ -1,0 +1,73 @@
+openapi: 3.0.3
+info:
+  title: Training REST JWT Demo API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8082
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is up
+  /api/auth/login:
+    post:
+      summary: Login and get JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: JWT token issued
+        '400':
+          description: Validation or authentication error
+  /api/policies/{policyNo}/summary:
+    get:
+      summary: Get policy summary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: policyNo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Policy summary returned
+        '401':
+          description: Missing or invalid token
+  /api/claims/{claimNo}/status:
+    get:
+      summary: Get claim status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: claimNo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Claim status returned
+        '401':
+          description: Missing or invalid token
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

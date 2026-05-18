@@ -1,0 +1,171 @@
+# Module 01 — JSP 與伺服器端渲染
+
+## 模組目標
+
+這一模組要讓學員理解，JSP 不只是「舊技術」，而是很多企業系統仍在使用的交付形式。學員至少要能看懂：後端把資料塞進 request attribute，JSP 再把內容渲染成 HTML 的流程。
+
+## 核心重點
+
+- JSP 請求生命週期
+- Servlet 容器與 JSP 編譯概念
+- request / session / application scope
+- 伺服器端渲染頁面的優缺點
+
+## 情境說明
+
+假設你接手一個保單查詢後台頁面，使用者反映畫面欄位顯示錯誤。你打開 JSP 後只看到 `${policy.policyNo}`、`${policy.holderName}`，如果不知道這些資料是誰先放進來、放在哪個 scope、頁面在請求流程中的哪個位置，就很難開始維護。
+
+## JSP 為什麼還要學
+
+因為在大量企業專案裡，JSP 不是歷史遺跡，而是仍在線上服務中的核心頁面。維運工程師常見的工作不是「重寫」，而是：
+
+- 找出頁面資料從哪裡來
+- 修正畫面欄位顯示錯誤
+- 補上查詢條件
+- 接一條新的 API 給現有頁面使用
+
+很多企業專案不會讓你一進場就重寫成 Vue 或 React。更常見的工作是：
+
+- 找出資料從 controller 怎麼進 JSP
+- 判斷某欄位應不應該進 session
+- 修正頁面邏輯與標籤
+- 逐步把部分互動抽成 AJAX 或 API 消費
+
+## 請求流程拆解
+
+1. 瀏覽器送出 HTTP request。
+2. Controller 或 Servlet 接住請求。
+3. 後端把資料放進 request 或 session。
+4. JSP 根據 attribute 與標籤語法輸出 HTML。
+5. 瀏覽器收到完成後的 HTML。
+
+### Step 1：先分清誰負責準備資料，誰負責顯示資料
+
+JSP 本身不是資料來源，它是顯示層。這一點要先講清楚：
+
+- controller / servlet / service：準備資料
+- request / model / session：承接資料
+- JSP：輸出 HTML
+
+如果學員一開始就把 JSP 當成業務邏輯執行點，後面就會一直把不該放在頁面的判斷塞進去。
+
+### Step 2：理解 JSP 在容器中的角色
+
+JSP 不是單純 HTML 檔。它在執行時會由 servlet container 轉譯成 servlet 類型後執行，這也是為什麼它屬於伺服器端渲染。
+
+教學上不需要把 Jasper 細節講到很深，但至少要讓學員知道：
+
+- JSP 是伺服器端處理
+- 瀏覽器拿到的是已完成的 HTML
+- 所以頁面初始內容通常在回應送出前就決定好了
+
+## 範例
+
+### Controller 準備資料
+
+```java
+@GetMapping("/policy-dashboard")
+public String policyDashboard(Model model) {
+	model.addAttribute("policy", policyFacade.getPolicySummary("PL20240001"));
+	return "policy-dashboard";
+}
+```
+
+### JSP 顯示資料
+
+```jsp
+<h2>保單摘要</h2>
+<p>保單號：${policy.policyNo}</p>
+<p>保戶姓名：${policy.holderName}</p>
+<p>狀態：${policy.status}</p>
+```
+
+### Step 3：追資料來源時應該怎麼找
+
+建議教學員固定按這個順序排查：
+
+1. 先找 JSP 中用到的 EL 表達式，例如 `${policy.policyNo}`
+2. 再回 controller 或 servlet 找 `model.addAttribute("policy", ...)`
+3. 再往下追 service 或 facade 的資料來源
+
+這比直接從 JSP 一路硬讀到底有效得多。
+
+## scope 差異
+
+- request scope：一次請求有效，適合單頁顯示資料
+- session scope：跨多次請求有效，適合登入資訊或短期會話資料
+- application scope：整個應用程式共用，通常不用來放使用者專屬資訊
+
+### Step 4：scope 不是名詞題，而是資料生命週期設計
+
+這一段要讓學員知道，不同 scope 對應的是資料該活多久：
+
+- request：單次查詢結果、一次頁面顯示
+- session：登入使用者資訊、短期會話選項
+- application：系統共用常數或全域設定
+
+常見誤用：
+
+- 把查詢結果丟進 session，導致舊資料殘留
+- 把使用者資料放 application scope，造成安全風險
+
+### Step 5：server-side rendering 的優點與限制要連回專案情境
+
+這一段不要只講抽象概念，應回到 05 的主題：
+
+- 優點：對舊系統維運與後端快速交付友善
+- 限制：互動複雜時，很難靠 JSP 一路撐到現代前台需求
+
+這樣才能自然銜接後面的 jQuery、AJAX、Axios 與 06 的 Vue。
+
+## 優點與限制
+
+### 優點
+
+- 頁面一開始就有完整 HTML
+- 對舊系統與伺服器端流程整合容易
+- 後端工程師可以快速交付簡單頁面
+
+### 限制
+
+- 畫面與後端耦合高
+- 頁面互動一複雜就容易混亂
+- 重用性與模組化通常比不上現代前端框架
+
+## 常見錯誤
+
+- 不知道 `${...}` 的資料從哪裡來。
+- 把太多業務邏輯直接寫進 JSP。
+- 混用 session 與 request，導致資料生命週期混亂。
+- 覺得 JSP 等於不能接 API，其實只是使用方式不同。
+- 看到畫面錯誤就直接改 JSP，沒有先回頭確認後端有沒有準備資料。
+- 把顯示判斷、驗證與資料組裝全部塞進 JSP scriptlet 或標籤條件裡。
+
+## 自我檢查清單
+
+- 我能指出 JSP 中某個欄位的資料來源嗎？
+- 我能解釋 request、session、application scope 的差異嗎？
+- 我知道 JSP 是伺服器端渲染，而不是前端動態框架嗎？
+- 我能判斷哪段邏輯該留在後端，哪段只該負責顯示嗎？
+
+## 練習題
+
+1. 找出一個 JSP 頁面顯示欄位的資料來源。
+2. 解釋某個欄位為什麼適合放 request scope，不適合放 session scope。
+3. 畫出一個 JSP 頁面的完整請求流程。
+4. 修改頁面，多顯示一個保單產品代碼欄位。
+
+## 練習解答方向
+
+1. 先從 controller 的 model 或 request attribute 找起。
+2. 若資料只跟單次查詢有關，通常不應進 session。
+3. 流程題要包含 controller、scope、JSP 輸出三段。
+4. 新增欄位題要先確認後端是否已準備資料，不是只改 JSP。
+
+## 驗收標準
+
+- 能解釋 JSP 為什麼屬於伺服器端渲染
+- 能說出 request scope 與 session scope 的差異
+- 能指出 JSP 頁面中哪些內容是後端先準備好的
+- 能用文字描述一個 JSP 頁面的完整請求流程
+- 能說明 JSP 在舊系統維運中的實際角色

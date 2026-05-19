@@ -1,0 +1,35 @@
+# Git 忽略規則 — 配合教材說明 Module 01
+
+# === 依賴套件（永遠不要提交這些）===
+node_modules/
+.pnp
+.pnp.js
+
+# === 建置輸出 ===
+dist/
+dist-ssr/
+*.local
+
+# === 環境變數（包含機密憑證）===
+# 【重要教學點】.env 檔案不應進入版本控制
+# 應使用 .env.example 作為範本並提交，讓新成員知道需要哪些變數
+.env
+.env.local
+.env.*.local
+
+# === 編輯器與作業系統 ===
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# === IDE 設定（通常不提交，除非團隊有共識）===
+# .vscode/ 是否提交視團隊規範而定
+# 本教材刻意提交 .vscode/instructions.md 作為教學引導文件
+
+# === TypeScript 建置快取 ===
+*.tsbuildinfo
+
+# === 測試覆蓋率報告 ===
+coverage/

@@ -1,9 +1,16 @@
 // ================================================================
-// user.ts.base — 衝突前的共同祖先版本
+// user.ts.theirs — 同事的修改版本（THEIRS）
 //
-// 這是衝突發生前雙方都認同的版本（三向合併的 BASE）。
-// 此版本的 login() 函式只有基本的登入邏輯，
-// 沒有 rememberMe 功能，也沒有錯誤次數限制。
+// 同事在 feature/login-attempt-limit 分支上的改動：
+// 為了強化安全性，加入登入錯誤次數統計，
+// 連續錯誤 5 次後鎖定帳號 30 分鐘。
+//
+// 改動摘要：
+// 1. 新增 loginAttempts ref 追蹤失敗次數
+// 2. 新增 isLocked ref 與 lockUntil ref 追蹤鎖定狀態
+// 3. login() 在呼叫 API 前先檢查是否被鎖定
+// 4. 登入失敗時累加計數，達 5 次設定鎖定時間戳
+// 5. 登入成功後重置計數器
 // ================================================================
 
 import { defineStore } from 'pinia'
@@ -16,15 +23,38 @@ export const useUserStore = defineStore('user', () => {
   const isLoading = ref(false)
   const loginError = ref<string | null>(null)
 
+  // ← THEIRS 新增：錯誤次數追蹤狀態
+  const loginAttempts = ref(0)
+  const isLocked = ref(false)
+  const lockUntil = ref<number | null>(null)  // Unix timestamp (ms)
+
   const isAuthenticated = computed(() => !!token.value && !!currentUser.value)
   const isAdmin = computed(() => currentUser.value?.role === 'admin')
   const displayName = computed(() => currentUser.value?.username ?? '訪客')
 
+  // ← THEIRS 新增：計算剩餘鎖定秒數
+  const remainingLockSeconds = computed(() => {
+    if (!lockUntil.value) return 0
+    const remaining = Math.ceil((lockUntil.value - Date.now()) / 1000)
+    return Math.max(0, remaining)
+  })
+
   /**
-   * 基本登入函式（BASE 版本）
-   * 沒有 rememberMe，沒有錯誤次數統計
+   * 使用者登入（THEIRS 加入了錯誤次數限制）
    */
   async function login(email: string, password: string): Promise<boolean> {
+    // ← THEIRS 新增：鎖定檢查
+    if (isLocked.value) {
+      if (lockUntil.value && Date.now() < lockUntil.value) {
+        loginError.value = `帳號已鎖定，請 ${remainingLockSeconds.value} 秒後再試`
+        return false
+      }
+      // 鎖定時間到了，自動解鎖
+      isLocked.value = false
+      lockUntil.value = null
+      loginAttempts.value = 0
+    }
+
     isLoading.value = true
     loginError.value = null
 
@@ -33,8 +63,21 @@ export const useUserStore = defineStore('user', () => {
 
       if (!response.success || !response.data) {
         loginError.value = response.message
+        loginAttempts.value++  // ← THEIRS 新增：錯誤計數
+
+        // ← THEIRS 新增：達 5 次鎖定 30 分鐘
+        if (loginAttempts.value >= 5) {
+          isLocked.value = true
+          lockUntil.value = Date.now() + 30 * 60 * 1000  // 30 分鐘
+          loginError.value = '錯誤次數過多，帳號已鎖定 30 分鐘'
+        }
         return false
       }
+
+      // ← THEIRS 新增：登入成功後重置計數
+      loginAttempts.value = 0
+      isLocked.value = false
+      lockUntil.value = null
 
       token.value = response.data.accessToken
       await fetchCurrentUser()
@@ -51,6 +94,10 @@ export const useUserStore = defineStore('user', () => {
     currentUser.value = null
     token.value = null
     loginError.value = null
+    // ← THEIRS 新增：登出時重置鎖定狀態（管理員手動解鎖用）
+    loginAttempts.value = 0
+    isLocked.value = false
+    lockUntil.value = null
   }
 
   async function fetchCurrentUser(): Promise<void> {
@@ -64,6 +111,7 @@ export const useUserStore = defineStore('user', () => {
   return {
     currentUser, token, isLoading, loginError,
     isAuthenticated, isAdmin, displayName,
+    loginAttempts, isLocked, remainingLockSeconds,  // ← THEIRS 新增 export
     login, logout, fetchCurrentUser
   }
 })

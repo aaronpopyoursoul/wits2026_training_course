@@ -1,6 +1,6 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { User, AuthToken, ApiResponse } from '@/types'
+import { defineStore } from "pinia";
+import { ref, computed } from "vue";
+import type { User, AuthToken, ApiResponse } from "@/types";
 
 // ================================================================
 // user store — 管理使用者認證狀態
@@ -12,19 +12,20 @@ import type { User, AuthToken, ApiResponse } from '@/types'
 // 兩人都修改了同一個 login() 函式，製造了合併衝突。
 // ================================================================
 
-export const useUserStore = defineStore('user', () => {
+export const useUserStore = defineStore("user", () => {
   // --- State ---
-  const currentUser = ref<User | null>(null)
-  const token = ref<string | null>(null)
-  const isLoading = ref(false)
-  const loginError = ref<string | null>(null)
+  const currentUser = ref<User | null>(null);
+  const token = ref<string | null>(null);
+  const isLoading = ref(false);
+  const loginError = ref<string | null>(null);
 
   // --- Getters ---
-  const isAuthenticated = computed(() => !!token.value && !!currentUser.value)
-  const isAdmin = computed(() => currentUser.value?.role === 'admin')
-  const displayName = computed(() =>
-    currentUser.value?.username ?? '訪客'
-  )
+  const isAuthenticated = computed(() => !!token.value && !!currentUser.value);
+  const isAdmin = computed(() => currentUser.value?.role === "admin");
+  const displayName = computed(() => currentUser.value?.username ?? "訪客");
+
+  const maxLoginCount = 5;
+  const loginCount = ref(0);
 
   // --- Actions ---
 
@@ -38,35 +39,42 @@ export const useUserStore = defineStore('user', () => {
   async function login(
     email: string,
     password: string,
-    rememberMe: boolean = false
+    rememberMe: boolean = false,
   ): Promise<boolean> {
-    isLoading.value = true
-    loginError.value = null
+    isLoading.value = true;
+    loginError.value = null;
 
     try {
       // 模擬 API 呼叫
-      const response = await mockLoginApi(email, password)
+      const response = await mockLoginApi(email, password);
 
       if (!response.success || !response.data) {
-        loginError.value = response.message
-        return false
+        loginCount.value += 1;
+        const remaining = maxLoginCount - loginCount.value;
+        if (loginCount.value >= maxLoginCount) {
+          loginError.value = `連續錯誤 ${maxLoginCount} 次，帳號已被鎖住`;
+        } else {
+          loginError.value = `${response.message}（剩餘 ${remaining} 次機會）`;
+        }
+        //loginError.value = response.message
+        return false;
       }
 
-      const { accessToken, refreshToken } = response.data
-      token.value = accessToken
+      const { accessToken, refreshToken } = response.data;
+      token.value = accessToken;
 
       if (rememberMe) {
-        localStorage.setItem('auth_token', accessToken)
-        localStorage.setItem('refresh_token', refreshToken)
+        localStorage.setItem("auth_token", accessToken);
+        localStorage.setItem("refresh_token", refreshToken);
       }
 
-      await fetchCurrentUser()
-      return true
+      await fetchCurrentUser();
+      return true;
     } catch (err) {
-      loginError.value = '網路連線異常，請稍後再試'
-      return false
+      loginError.value = "網路連線異常，請稍後再試";
+      return false;
     } finally {
-      isLoading.value = false
+      isLoading.value = false;
     }
   }
 
@@ -74,22 +82,22 @@ export const useUserStore = defineStore('user', () => {
    * 登出並清除所有認證狀態
    */
   function logout(): void {
-    currentUser.value = null
-    token.value = null
-    loginError.value = null
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('refresh_token')
+    currentUser.value = null;
+    token.value = null;
+    loginError.value = null;
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("refresh_token");
   }
 
   /**
    * 取得目前登入使用者資訊
    */
   async function fetchCurrentUser(): Promise<void> {
-    if (!token.value) return
+    if (!token.value) return;
 
-    const response = await mockGetUserApi(token.value)
+    const response = await mockGetUserApi(token.value);
     if (response.success && response.data) {
-      currentUser.value = response.data
+      currentUser.value = response.data;
     }
   }
 
@@ -97,10 +105,10 @@ export const useUserStore = defineStore('user', () => {
    * 從 localStorage 恢復登入狀態（頁面重整後呼叫）
    */
   function restoreSession(): void {
-    const savedToken = localStorage.getItem('auth_token')
+    const savedToken = localStorage.getItem("auth_token");
     if (savedToken) {
-      token.value = savedToken
-      fetchCurrentUser()
+      token.value = savedToken;
+      fetchCurrentUser();
     }
   }
 
@@ -115,9 +123,9 @@ export const useUserStore = defineStore('user', () => {
     login,
     logout,
     fetchCurrentUser,
-    restoreSession
-  }
-})
+    restoreSession,
+  };
+});
 
 // ================================================================
 // 模擬 API（實際專案會替換為 axios/fetch 呼叫）
@@ -125,48 +133,46 @@ export const useUserStore = defineStore('user', () => {
 
 async function mockLoginApi(
   email: string,
-  _password: string
+  _password: string,
 ): Promise<ApiResponse<AuthToken>> {
-  await delay(300)
+  await delay(300);
 
-  if (email === 'admin@example.com') {
+  if (email === "admin@example.com") {
     return {
       success: true,
       data: {
-        accessToken: 'mock-access-token-admin-xyz',
-        refreshToken: 'mock-refresh-token-admin-xyz',
-        expiresIn: 3600
+        accessToken: "mock-access-token-admin-xyz",
+        refreshToken: "mock-refresh-token-admin-xyz",
+        expiresIn: 3600,
       },
-      message: '登入成功'
-    }
+      message: "登入成功",
+    };
   }
 
   return {
     success: false,
     data: null,
-    message: '帳號或密碼錯誤',
-    errorCode: 'AUTH_INVALID_CREDENTIALS'
-  }
+    message: "帳號或密碼錯誤",
+    errorCode: "AUTH_INVALID_CREDENTIALS",
+  };
 }
 
-async function mockGetUserApi(
-  _token: string
-): Promise<ApiResponse<User>> {
-  await delay(200)
+async function mockGetUserApi(_token: string): Promise<ApiResponse<User>> {
+  await delay(200);
   return {
     success: true,
     data: {
-      id: 'usr_001',
-      username: 'Aaron Chen',
-      email: 'admin@example.com',
-      role: 'admin',
-      avatarUrl: 'https://avatars.example.com/usr_001.jpg',
-      createdAt: '2024-01-15T08:00:00Z'
+      id: "usr_001",
+      username: "Aaron Chen",
+      email: "admin@example.com",
+      role: "admin",
+      avatarUrl: "https://avatars.example.com/usr_001.jpg",
+      createdAt: "2024-01-15T08:00:00Z",
     },
-    message: '取得成功'
-  }
+    message: "取得成功",
+  };
 }
 
 function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

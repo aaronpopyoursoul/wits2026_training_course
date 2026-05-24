@@ -39,7 +39,7 @@ export const useUserStore = defineStore("user", () => {
   async function login(
     email: string,
     password: string,
-    rememberMe: boolean = false,
+    rememberMe: boolean = true
   ): Promise<boolean> {
     isLoading.value = true;
     loginError.value = null;

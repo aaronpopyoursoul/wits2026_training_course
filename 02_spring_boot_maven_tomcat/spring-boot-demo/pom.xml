@@ -22,6 +22,10 @@
         <java.version>1.8</java.version>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
+        <!-- CVE fix: upgrade embedded Tomcat to patch CRITICAL/HIGH CVEs (9.0.97 had 29 CVEs) -->
+        <tomcat.version>9.0.118</tomcat.version>
+        <!-- CVE fix: CVE-2022-1471 - SnakeYAML Constructor RCE; Spring Framework 5.3.29+ supports 2.x -->
+        <snakeyaml.version>2.0</snakeyaml.version>
     </properties>
 
     <dependencies>

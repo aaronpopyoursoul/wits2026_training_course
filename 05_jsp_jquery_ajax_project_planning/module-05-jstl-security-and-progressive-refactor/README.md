@@ -37,7 +37,47 @@
 - 使用者輸入或外部來源資料
 
 第三類最需要警覺 XSS 風險。
+#### JSTL 常用標籤對照範例
 
+```jsp
+<%@ taglib prefix="c"  uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+
+<%-- 1. 條件判斷：c:if --%>
+<c:if test="${policy.status == 'EXPIRED'}">
+  <div class="alert">此保單已到期</div>
+</c:if>
+
+<%-- 2. 排他條件：c:choose / c:when / c:otherwise --%>
+<c:choose>
+  <c:when test="${policy.status == 'ACTIVE'}">
+    <span class="badge-green">有效</span>
+  </c:when>
+  <c:when test="${policy.status == 'EXPIRED'}">
+    <span class="badge-red">已到期</span>
+  </c:when>
+  <c:otherwise>
+    <span class="badge-grey">未知</span>
+  </c:otherwise>
+</c:choose>
+
+<%-- 3. 迴圈：c:forEach --%>
+<c:forEach var="claim" items="${claimList}" varStatus="loop">
+  <tr class="${loop.odd ? 'row-odd' : 'row-even'}">
+    <td>${loop.index + 1}</td>
+    <td>${claim.claimNo}</td>
+    <td>${claim.status}</td>
+  </tr>
+</c:forEach>
+
+<%-- 4. 空列表战行 --%>
+<c:if test="${empty claimList}">
+  <tr><td colspan="3">目前焠理賠紀錄</td></tr>
+</c:if>
+
+<%-- 5. 計算列表數量 --%>
+<p>共 ${fn:length(claimList)} 筆理賠</p>
+```
 ### Step 2：理解表單生命週期
 
 - 初次進頁
@@ -108,7 +148,23 @@
 - 這個值來自哪裡
 - 是否做過 escaping
 - 是否可能夾帶惡意內容
+#### XSS 安全與不安全的寫法對照
 
+```jsp
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+
+<%-- ✘ 不安全：直接輸出使用者輸入，可能擭入 <script> 標籤 --%>
+<div class="remark">${remark}</div>
+
+<%-- ✔ 安全：用 fn:escapeXml 轉讏 HTML 特殊字元 --%>
+<div class="remark">${fn:escapeXml(remark)}</div>
+```
+
+`fn:escapeXml` 會把 `<`、`>`、`&`、`"`、`'` 轉被 HTML 安全對應符，防止 `<script>alert('xss')</script>` 被瀏覽器執行。
+
+> **原則**：所有來自使用者輸入或外部來源的值，輸出到 HTML 時一律用 `fn:escapeXml` 包裹。
+
+卖點：JSP 直接輸出 `${...}` 不會自動 escape，這就是為什麼舊系統有時會有 XSS。
 ## 範例：表單生命週期
 
 以保單查詢頁為例：
@@ -118,6 +174,74 @@
 3. 送出表單到 controller
 4. 查詢成功：顯示結果
 5. 查詢失敗：保留原輸入並顯示錯誤訊息
+
+#### 將表單生命週期轉譯成 Spring MVC 代碼
+
+```java
+// PolicyController.java
+
+@GetMapping("/policy-search")
+public String showSearchForm() {
+  // Step 1：初次進頁，什麼都不用做，JSP 所有欄位空白
+  return "policy-search";
+}
+
+@PostMapping("/policy-search")
+public String submitSearch(
+    @RequestParam(required = false) String policyNo,
+    Model model) {
+
+  // Step 3 & 4：出現驗證失敗，保留原輸入
+  if (policyNo == null || policyNo.isBlank()) {
+    model.addAttribute("policyNo", policyNo);   // 回填表單
+    model.addAttribute("error", "保單號碼不可空白");
+    return "policy-search";                     // 回到表單頁
+  }
+
+  try {
+    PolicySummary policy = policyService.findByPolicyNo(policyNo);
+    model.addAttribute("policy", policy);
+    model.addAttribute("policyNo", policyNo);   // 回填副本
+    return "policy-search";                     // 同一頁顯示結果
+  } catch (PolicyNotFoundException e) {
+    model.addAttribute("policyNo", policyNo);   // 回填表單
+    model.addAttribute("error", "查無此保單");
+    return "policy-search";
+  }
+}
+```
+
+```jsp
+<%-- policy-search.jsp --%>
+<%@ taglib prefix="c"  uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+
+<form method="POST" action="/policy-search">
+  <label>保單號碼</label>
+  <%-- 回填原輸入値，驗證失敗後不白屏 --%>
+  <input type="text" name="policyNo" value="${fn:escapeXml(policyNo)}" />
+  <button type="submit">查詢</button>
+</form>
+
+<%-- 錯誤訊息 --%>
+<c:if test="${not empty error}">
+  <div class="error">${fn:escapeXml(error)}</div>
+</c:if>
+
+<%-- 查詢結果 --%>
+<c:if test="${not empty policy}">
+  <table border="1">
+    <tr><th>保單號</th><td>${policy.policyNo}</td></tr>
+    <tr><th>保戶</th><td>${fn:escapeXml(policy.holderName)}</td></tr>
+    <tr><th>狀態</th><td>${policy.status}</td></tr>
+  </table>
+</c:if>
+```
+
+重點：
+- controller 統一負責資料音驗證與寫入 model，JSP 只負責類生 HTML。
+- `fn:escapeXml` 於使用者可控內容的欄位上一律使用。
+- 回填襘於 `model.addAttribute("policyNo", policyNo)` 與 JSP 內 `value="${...}"` 配合，不需 JavaScript。
 
 這樣的拆法能幫學員理解「回填」其實是流程設計問題。
 

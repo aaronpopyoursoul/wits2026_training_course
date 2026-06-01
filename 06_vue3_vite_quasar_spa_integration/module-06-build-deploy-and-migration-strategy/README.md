@@ -2,156 +2,334 @@
 
 ## 模組目標
 
-這一模組要把 06 從開發模式推進到交付思維。學員要能說明本機可以跑，不代表部署可用；也要能提出 Vue SPA 與 JSP 並存時的 migration strategy，而不是只說「之後再慢慢改」。
+這一模組要把學員從「本機開發成功」帶到「可交付、可部署、可規劃遷移」。
+
+很多前端初學者會以為：
+
+- `npm run dev` 可以跑就代表完成了
+- 只要 build 成功就代表可以部署
+- migration strategy 只要寫「逐步替換」就夠了
+
+這些理解都不夠。真正交付時，還要面對：
+
+- API base URL 與環境差異
+- router base 與部署子路徑
+- 靜態資源路徑
+- SPA 子路由重整 fallback
+- 新系統與舊系統如何分階段共存
+
+學完後，學員應能：
+
+1. 說明開發環境與部署環境的差異。
+2. 說明 `env`、`VITE_API_BASE_URL`、router base 各自的角色。
+3. 設計一份最小部署檢查清單。
+4. 寫出具體的 Vue / JSP migration strategy，而不是抽象口號。
+
+## 先備知識
+
+- 已完成前端頁面、API 串接與登入流程
+- 已理解 module-04 的 CORS 與系統共存概念
+- 已理解 module-05 的資料狀態與錯誤處理
 
 ## 情境說明
 
-專案在 `npm run dev` 下正常，但部署到測試環境後，API base URL、router base path 或靜態資源路徑全部錯掉。另一個常見情況是 Vue 與 JSP 共存，但沒有定義導覽邊界與切換策略，導致使用者體驗混亂。
+在開發機上，前端透過 Vite dev server 執行，一切看起來都正常。可是部署到測試環境後，可能立刻發生：
 
-## 核心重點
+- API 打到錯的 host
+- CSS / JS 靜態資源 404
+- 直接進入子路由可以，但重新整理就 404
+- Vue 與 JSP 都存在，卻沒有人知道哪些路徑該交給誰
 
-- env 與 base URL
-- build / dist 基本觀念
-- router 路徑與部署位置
-- lazy routes
-- Vue / JSP migration strategy
+這一章的目的，就是讓學員理解：
 
-## 教學步驟
+> 前端可以畫出畫面，不代表它已經準備好被交付。
 
-### Step 1：先理解 dev 與 deploy 差異
+## 本章核心問題
 
-本機 dev server 與實際部署的 URL、base path、proxy 條件可能完全不同。
+1. 為什麼 `npm run dev` 跟部署後的行為會不同？
+2. `VITE_API_BASE_URL` 與 router base 各自控制什麼？
+3. 為什麼首頁正常、子頁重整卻 404？
+4. migration strategy 為什麼不能只寫「逐步替換」？
 
-### Step 1-1：本機可跑，常常只是代表「開發環境條件成立」
+## 教學地圖
 
-這句話要在課堂上講得很明白。學員很容易以為 `npm run dev` 正常，就代表專案已可交付，但實際上還有：
+1. 先區分 dev 與 deploy
+2. 再整理 build 與部署檢查點
+3. 最後把 migration strategy 寫成可執行方案
 
-- API base URL
-- router base
-- 靜態資源路徑
-- 重新整理子路由 fallback
+---
 
-這些在部署環境都可能跟本機不同。
+## Step 1：先理解 dev 與 deploy 的差異
 
-### Step 1-2：env 與 base URL 的角色
+### Step 1-1：本機可跑，只代表開發條件成立
 
-建議用一句話定義：
+`npm run dev` 正常，通常只代表：
 
-- env：描述不同環境的變數差異
-- base URL：前端打 API 時的根路徑
+- Vite dev server 有起來
+- 本機 `.env` 有設對
+- 你目前的 router 路徑在開發環境可運作
 
-範例：
+但這不保證正式環境也會一樣，因為部署後通常會改變：
+
+- domain
+- path prefix
+- API host
+- 靜態檔案位置
+- server fallback 規則
+
+### Step 1-2：把常見問題先列出來
+
+部署時最常出錯的四件事：
+
+1. API base URL 指到錯的地方
+2. router base 與實際部署位置不一致
+3. 靜態資源路徑不正確
+4. 子路由重整時，伺服器沒有把請求導回 `index.html`
+
+這四點要變成學員的固定檢查習慣。
+
+---
+
+## Step 2：理解 `env`、API base URL 與 router base
+
+### Step 2-1：`env` 是環境差異，不是雜項設定
+
+最小概念：
+
+- `.env.development` 給本機開發用
+- `.env.production` 給正式環境 build 用
+- 變數名稱要有一致規則
+
+在 Vite 中，前端可讀的環境變數通常以 `VITE_` 開頭。
+
+例如：
 
 ```env
 VITE_API_BASE_URL=http://localhost:8082
 ```
 
-這裡要讓學員理解，這不是雜項設定，而是交付成敗的關鍵之一。
+### Step 2-2：API base URL 控制的是 HTTP request 的根路徑
 
-### Step 2：整理 deployment checklist
+現有專案對照：
 
-- API base URL
-- router base
-- 靜態資源路徑
-- 錯誤頁與 fallback
+- `frontend-demo/src/services/http.ts`
 
-### Step 2-1：router base 與部署位置的關係
+最小寫法：
 
-如果前端不是部署在網站根目錄，而是像：
+```ts
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8082'
+
+export const http = axios.create({
+	baseURL: apiBaseUrl,
+})
+```
+
+教學時要點出：
+
+- `VITE_API_BASE_URL` 控制的是打 API 的位置
+- 它不控制前端頁面路由
+- 它也不等於部署目錄路徑
+
+### Step 2-3：router base 控制的是前端路由的根路徑
+
+如果前端部署在網站根目錄，可能用 `/` 就夠了。
+
+但如果部署在子路徑，例如：
 
 - `/app/`
 - `/portal/`
 
-那 router 與 build 設定通常都要配合。否則常見結果就是：
+那 router 與 build 設定都要一起調整。
 
-- 首頁可進
-- 子頁面重整 404
-- 靜態資源抓不到
+最小正確觀念：
 
-### Step 2-2：lazy routes 的角色
+```ts
+history: createWebHistory(import.meta.env.BASE_URL)
+```
 
-這一章除了部署，也應補一下 lazy routes 的意義：
+這個概念在目前 `frontend-demo/src/router/index.ts` 還沒有完整示範，因此很適合作為教材中的「部署前必補」重點。
 
-- 首次載入較輕
-- 大型前台頁面可分段載入
+### Step 2-4：Vite `base` 與 router base 要對齊
 
-但要提醒學員：lazy loading 是效能與交付策略，不是只是語法技巧。
+如果部署在 `/app/`，常見設定會長這樣：
 
-### Step 3：設計 migration strategy
+```ts
+export default defineConfig({
+	base: '/app/',
+})
+```
 
-至少要定義：
+對應的 router：
 
-- 哪些頁面先用 Vue
-- 哪些頁面暫留 JSP
-- 導覽如何切換
-- 驗收怎麼切分
+```ts
+createWebHistory(import.meta.env.BASE_URL)
+```
 
-### Step 3-1：migration strategy 需要回答的四個問題
+這兩者不對齊時，很容易出現：
 
-1. 哪些頁面優先改
-2. 哪些頁面暫時保留
-3. 使用者如何在新舊頁面間切換
-4. 每一階段怎麼驗收
+- 首頁看起來正常
+- 重新整理子頁 404
+- JS/CSS 檔案抓錯位置
 
-### Step 3-2：不要只寫「逐步替換」
+---
 
-這是最常見但最沒用的答案。真正可執行的 migration strategy 至少要有：
+## Step 3：理解 build 成功不等於部署可用
 
-- 頁面清單
-- 路徑切分
-- 風險說明
-- 里程碑
+### Step 3-1：`dist` 只是輸出結果，不是保證書
 
-## 範例：最小部署檢查清單
+當你執行 `npm run build`，Vite 會產生 `dist`。但真正要檢查的是：
 
-- `.env` 是否對應正確 API 位址
-- router base 是否符合部署路徑
-- 重新整理子路由時伺服器是否有 fallback 設定
-- 靜態資源路徑是否正確
-- 404 與未登入導向是否仍可運作
+- 產出的 HTML 內引用的資源路徑正不正確
+- API base URL 是否是目標環境需要的值
+- router base 是否符合部署位置
 
-## 範例：Vue / JSP 漸進式切分
+### Step 3-2：最小部署檢查清單
 
-- 第一階段：登入、查詢前台改為 Vue
-- 第二階段：高互動功能頁逐步遷移
-- 第三階段：低互動或低變動後台頁再評估是否替換
+部署前至少檢查這五項：
 
-這種切法比一次重寫更符合企業現場的風險控制。
+1. `.env` 是否對應正確 API 位址
+2. Vite `base` 是否符合部署目錄
+3. router history base 是否與 Vite `base` 對齊
+4. 子路由重整時，伺服器是否有 fallback 到 `index.html`
+5. 未登入導向、404 頁面、靜態資源是否仍正常運作
+
+### Step 3-3：最小 `vite.config.ts` 示意
+
+```ts
+export default defineConfig({
+	base: '/app/',
+	plugins: [vue(), quasar()],
+	server: {
+		port: 5173,
+	},
+})
+```
+
+現有專案對照：
+
+- `frontend-demo/vite.config.ts`
+
+### Step 3-4：為什麼子路由重整會 404
+
+當使用者直接打開 `/app/policies` 時：
+
+- 瀏覽器會對伺服器要 `/app/policies`
+- 但伺服器如果只認得實體檔案，不知道這是 SPA 路由
+- 就會回 404
+
+所以部署 SPA 必須有 fallback，例如：
+
+```nginx
+location /app/ {
+		alias /var/www/vue-spa/;
+		try_files $uri $uri/ /app/index.html;
+}
+```
+
+這一段要讓學生知道：
+
+- 404 不一定是 Vue Router 寫錯
+- 很多時候是伺服器沒有把前端路由導回入口頁
+
+---
+
+## Step 4：lazy routes 要怎麼放進部署與交付脈絡
+
+### Step 4-1：lazy loading 不是語法展示，而是交付策略
+
+當前台頁面越來越多時，把每個頁面都打包進同一個初始 bundle，會讓第一次載入變慢。
+
+因此可以改成：
+
+```ts
+const PolicySummaryPage = () => import('@/pages/PolicySummaryPage.vue')
+```
+
+這個作法的真正價值在於：
+
+- 首次載入更輕
+- 不常用頁面延後下載
+- 更符合實際上線後的效能考量
+
+### Step 4-2：但不要把它教成萬靈丹
+
+要提醒學生：
+
+- lazy routes 不是所有部署問題的解法
+- 它解的是載入策略，不是 base path 或 fallback 問題
+
+---
+
+## Step 5：把 migration strategy 寫成可執行方案
+
+### Step 5-1：不能只寫「逐步替換」
+
+這句話太空泛，無法驗收，也無法排程。
+
+一份最小可執行的 migration strategy，至少要回答：
+
+1. 哪些頁面先改成 Vue
+2. 哪些頁面暫時保留 JSP
+3. 使用者怎麼在新舊頁面間切換
+4. 每個階段怎麼驗收
+
+### Step 5-2：最小 migration 範例
+
+可以這樣教：
+
+| 階段 | 範圍 | 原因 | 驗收方式 |
+| --- | --- | --- | --- |
+| 第 1 階段 | 登入頁、查詢前台 | 使用者量大、互動高、最能體現 SPA 價值 | 新前台可獨立登入與查詢 |
+| 第 2 階段 | 高互動業務頁 | 狀態管理複雜，適合 Vue | 使用者可在新前台完成主要流程 |
+| 第 3 階段 | 低互動舊後台 | 變動少，暫時保留 JSP 風險較低 | 評估是否保留或再重寫 |
+
+### Step 5-3：路徑切分也要一起寫
+
+與 module-04 呼應，migration strategy 最少應有：
+
+- `/app/**` 給 Vue SPA
+- `/legacy/**` 給 JSP
+- `/api/**` 給 Spring Boot
+
+如果沒有這種路徑邊界，遷移計畫通常只會停留在口頭上。
+
+---
+
+## 對照現有專案
+
+建議授課時搭配這些檔案：
+
+- `frontend-demo/vite.config.ts`
+- `frontend-demo/src/router/index.ts`
+- `frontend-demo/src/services/http.ts`
+
+授課順序建議：
+
+1. 先讀 README 中的最小配置概念
+2. 再看真實專案檔案，指出目前已具備與尚未補齊的地方
+3. 最後回到部署檢查清單，讓學生知道哪些是上線前一定要驗的點
 
 ## 常見錯誤
 
-- 把 `.env` 當成只有開發者才需要懂的細節。
-- 忘記部署環境與 dev server 的差異。
-- migration strategy 只寫一句「逐步替換」。
-- 沒理解 router base 對子路由與重整的影響。
-- 把 lazy routes 當成與交付無關的小優化。
+- 把 `.env` 當成只有開發者才需要理解的細節
+- 分不清 API base URL 與 router base
+- 只看首頁可進，不測子路由重整
+- 誤把部署錯誤當成 Vue 語法問題
+- migration strategy 只寫一句「逐步替換」
+- 把 lazy routes 當成與交付完全無關的小技巧
 
-## 練習題
+## 課堂練習
 
 1. 設計一份前端部署檢查清單。
-2. 設計一題 base URL / router 路徑錯誤的排查題。
-3. 說明 lazy routes 在此專題中的使用價值。
-4. 寫一份 Vue / JSP 並存的 migration 草案。
-5. 設計一個部署後子路由重整 404 的排查順序。
-
-## 解題方向
-
-1. 部署題要從環境變數、路由與靜態資源切入。
-2. base URL / router 題要先分清是 API 路徑還是前端路由問題。
-3. lazy routes 題要從載入策略與頁面規模回答。
-4. migration 題要說明切換順序與風險。
-5. 不要把部署問題誤認成框架語法問題。
-
-## 完整參考答案
-
-標準答案重點：
-
-- 可交付前端必須能在不同環境穩定解析路徑與 API
-- migration strategy 需要具體切分，而不是抽象口號
+2. 說明 `VITE_API_BASE_URL`、Vite `base`、router base 的差異。
+3. 設計一題「首頁正常，但子頁重整 404」的排查順序。
+4. 說明 lazy routes 在這個專題中的價值。
+5. 寫一份 Vue / JSP 並存的 migration 草案。
 
 ## 驗收標準
 
-- 能說明 env、base URL、router base 各自的角色
+- 能說明 dev 與 deploy 的差異
+- 能區分 API base URL、Vite `base`、router base 的角色
 - 能提出最小部署檢查清單
-- 能說明 lazy routes 與交付策略的關係
-- 能寫出具體的 Vue / JSP migration 草案
+- 能解釋為什麼子路由重整會 404
+- 能寫出具體、可執行的 Vue / JSP migration strategy

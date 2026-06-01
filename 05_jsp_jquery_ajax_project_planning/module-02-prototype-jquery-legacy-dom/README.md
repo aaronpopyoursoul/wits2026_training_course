@@ -118,6 +118,126 @@ $("searchButton").observe("click", function () {
 
 這時要讓學員知道：
 
+#### 直接綁定 vs 事件委派的差異
+
+```javascript
+// ❌ 直接綁定：只對「頁面初始存在」的 .claim-row 有效
+// 若後來 AJAX 新增了新的 .claim-row，不會觸發這個 handler
+$(".claim-row").on("click", function () {
+  $(this).toggleClass("selected");
+});
+
+// ✅ 事件委派：綁在穩定存在的父容器上，子元素新增後仍可觸發
+// 語法：$(靜態父容器).on(事件, 動態子選擇器, handler)
+$("#claimTable").on("click", ".claim-row", function () {
+  $(this).toggleClass("selected");
+});
+```
+
+Prototype.js 等效寫法（較舊系統常見）：
+
+```javascript
+// Prototype.js 通常需要在每次 DOM 更新後重新 observe，
+// 這也是為什麼舊系統常出現「新增後按鈕沒反應」的問題
+document.on("click", ".claim-row", function(event, element) {
+  element.toggleClassName("selected");
+});
+```
+
+## 完整維運情境範例
+
+以下模擬一個真實接手的 JSP 頁（保單查詢 + 顯示理賠面板），混有 jQuery 與 inline script：
+
+```html
+<!-- policy-query.jsp（模擬接手的頁面片段）-->
+<div id="searchSection">
+  <input type="text" id="policyNo" placeholder="輸入保單號">
+  <button id="searchButton">查詢</button>
+</div>
+
+<div id="resultSection" style="display:none">
+  <p>保單：<span id="resultPolicyNo"></span></p>
+  <p>狀態：<span id="resultStatus"></span></p>
+  <button id="toggleClaimButton">顯示理賠明細</button>
+</div>
+
+<div id="claimPanel" style="display:none">
+  <ul id="claimList"></ul>
+</div>
+
+<script>
+// 查詢按鈕 ── 讀值、送 request、更新畫面三步驟
+$("#searchButton").on("click", function () {
+  var policyNo = $("#policyNo").val();
+  if (!policyNo) {
+    alert("請輸入保單號");
+    return;
+  }
+
+  $.ajax({
+    url: "/api/policies/" + policyNo,
+    method: "GET",
+    headers: { Authorization: "Bearer " + localStorage.getItem("accessToken") },
+    success: function (data) {
+      // 1. 把值填進 DOM
+      $("#resultPolicyNo").text(data.policyNo);
+      $("#resultStatus").text(data.status);
+      // 2. 顯示結果區塊
+      $("#resultSection").show();
+      // 3. 重置理賠面板狀態（避免舊資料殘留）
+      $("#claimPanel").hide();
+      $("#claimList").empty();
+    },
+    error: function (xhr) {
+      if (xhr.status === 404) {
+        alert("查無此保單");
+      } else if (xhr.status === 401) {
+        alert("未登入或 token 已過期，請重新登入");
+      } else {
+        alert("系統錯誤，請稍後再試");
+      }
+    }
+  });
+});
+
+// 切換理賠明細面板
+$("#toggleClaimButton").on("click", function () {
+  var policyNo = $("#resultPolicyNo").text();
+  var panel = $("#claimPanel");
+
+  if (panel.is(":visible")) {
+    panel.hide();
+    $(this).text("顯示理賠明細");
+  } else {
+    $.get("/api/policies/" + policyNo + "/claims",
+      function (claims) {
+        var list = $("#claimList").empty();
+        if (claims.length === 0) {
+          list.append("<li>目前無理賠紀錄</li>");
+        } else {
+          $.each(claims, function (i, claim) {
+            list.append(
+              "<li>" + claim.claimNo + " — " + claim.status + "</li>"
+            );
+          });
+        }
+        panel.show();
+        $("#toggleClaimButton").text("隱藏理賠明細");
+      }
+    );
+  }
+});
+</script>
+```
+
+**維運閱讀步驟**（教學員用）：
+
+1. 先找所有 `.on("click", ...)` ── 找出兩個事件入口：`#searchButton`、`#toggleClaimButton`。
+2. `#searchButton` 做了三件事：讀 `#policyNo` 的值 → 送 AJAX → 填 `#resultPolicyNo`、`#resultStatus`。
+3. `#toggleClaimButton` 根據面板是否可見決定收合或展開，展開時才打 API（延遲載入）。
+4. 兩個 handler 都有錯誤回饋，不依賴 console。
+5. 理賠列表延遲載入：只有使用者點按鈕才呼叫 API，符合舊系統常見的按需查詢模式。
+
 - 直接綁定：適合固定 DOM
 - delegated event：適合動態元素
 

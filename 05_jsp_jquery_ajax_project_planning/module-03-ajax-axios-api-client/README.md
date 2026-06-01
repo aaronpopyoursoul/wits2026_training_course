@@ -89,26 +89,171 @@ async function queryClaim() {
 
 這一點要講明，否則學員很容易只把 Axios 理解成「比較潮的 AJAX」。
 
-## 教學重點
+#### Axios 建立專用 instance 與指定 token 的比較
 
-### 1. request 與 response 是一個完整流程
+**方式 A：每次呼叫自己加 header（舊系統測試頁常見）**
 
-不要只看「打到 API」，還要看：
+```javascript
+async function queryClaim() {
+  const claimNo = document.getElementById("claimNo").value;
+  const token = localStorage.getItem("accessToken");
 
-- request body 怎麼組
-- header 怎麼帶
-- response data 怎麼顯示
-- error response 怎麼處理
+  try {
+    const response = await axios.get(`/api/claims/${claimNo}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    document.getElementById("result").textContent =
+      JSON.stringify(response.data, null, 2);
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+```
 
-### 1-1：同源測試頁在舊系統維運裡的價值
+**方式 B：建立指定 instance 與 interceptor（推薦方式）**
 
-這一段很重要，因為 05 和 04 是一起搭的：
+```javascript
+// apiClient.js（偀就舊系統測試頁的建立方式）
+const apiClient = axios.create({
+  baseURL: "/api",  // 同源時直接用相對路徑
+  timeout: 10000,
+  headers: { "Content-Type": "application/json" }
+});
+
+// Request interceptor：統一帶入 Bearer token
+apiClient.interceptors.request.use(function (config) {
+  var token = localStorage.getItem("accessToken");
+  if (token) {
+    config.headers["Authorization"] = "Bearer " + token;
+  }
+  return config;
+});
+
+// Response interceptor：統一處理 401
+apiClient.interceptors.response.use(
+  function (response) { return response; },
+  function (error) {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem("accessToken");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
+
+// 使用：再也不用每次手动加 header
+async function queryClaim(claimNo) {
+  const response = await apiClient.get(`/claims/${claimNo}`);
+  return response.data;
+}
+```
+
+此方式的好處：
+- 每個呼叫不必手动加 header
+- token 遗失只需修改 interceptor 一處
+- 401 統一導回登入，不散在各頁 handler
+
+## 同源測試頁記得放在後端同源路徑下
+
+### 1-1：同源測試頁在舊系統維運裡的價値
+
+這一段很重要，因為 05 和 04 是一起搞的：
 
 - 把測試頁放在後端同源路徑下
 - 可直接驗證 JWT API
 - 可避開跨域干擾，先確認契約是否正確
 
 這就是為什麼 05 不只是「前端語法課」，而是 API 消費與維運課。
+
+#### 同源測試頁範例：api-test.jsp
+
+建立方式：將此檔放在 Spring Boot 的 `src/main/resources/static/` 之下，或並就 JSP  webapp 目錄。
+
+```html
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>API 測試頁</title>
+  <!-- 後端同源：直接引用，不需 CDN -->
+  <script src="/static/js/axios.min.js"></script>
+</head>
+<body>
+
+<h2>JWT API 測試頁</h2>
+
+<!-- 登入測試 -->
+<section>
+  <h3>1. 登入取得 Token</h3>
+  <input id="username" placeholder="帳號" value="admin" />
+  <input id="password" type="password" placeholder="密碼" value="123456" />
+  <button onclick="doLogin()">登入</button>
+  <pre id="loginResult"></pre>
+</section>
+
+<!-- 受保護 API 測試 -->
+<section>
+  <h3>2. 查詢保單（需 token）</h3>
+  <input id="policyNo" placeholder="保單號碼" value="PL20240001" />
+  <button onclick="queryPolicy()">查詢</button>
+  <pre id="policyResult"></pre>
+</section>
+
+<p id="errorMessage" style="color:red"></p>
+
+<script>
+// 同源路徑：相對路徑即可，不需要 localhost:8082
+var BASE_URL = "";
+
+async function doLogin() {
+  try {
+    var res = await axios.post(BASE_URL + "/api/auth/login", {
+      username: document.getElementById("username").value,
+      password: document.getElementById("password").value
+    });
+    localStorage.setItem("accessToken", res.data.token);
+    document.getElementById("loginResult").textContent =
+      "Token 已取得：" + res.data.token.substring(0, 40) + "...";
+  } catch (e) {
+    handleApiError(e);
+  }
+}
+
+async function queryPolicy() {
+  var policyNo = document.getElementById("policyNo").value;
+  var token = localStorage.getItem("accessToken");
+  try {
+    var res = await axios.get(BASE_URL + "/api/policies/" + policyNo, {
+      headers: { Authorization: "Bearer " + token }
+    });
+    document.getElementById("policyResult").textContent =
+      JSON.stringify(res.data, null, 2);
+  } catch (e) {
+    handleApiError(e);
+  }
+}
+
+function handleApiError(error) {
+  var msg = document.getElementById("errorMessage");
+  if (!error.response) {
+    msg.textContent = "網路錯誤：後端未回應";
+  } else if (error.response.status === 401) {
+    msg.textContent = "401 未授權，請先登入";
+  } else if (error.response.status === 404) {
+    msg.textContent = "404 查無資料";
+  } else {
+    msg.textContent = "HTTP " + error.response.status + "：" + JSON.stringify(error.response.data);
+  }
+}
+</script>
+</body>
+</html>
+```
+
+這頁的教學重點：
+- `BASE_URL = ""` + 相對路徑 = 同源，完全繞過 CORS。
+- `localStorage` 暫存 token，常見於舊系統紧急測試場合。
+- 這個測試頁不適合當正式前台，但對於舊系統類型 A 檔偃5莳內驗證 JWT 流程非常實用。
 
 ### 2. 帶 token 是前後端契約的一部分
 
@@ -143,6 +288,39 @@ async function queryClaim() {
 - network error：請求根本沒到後端
 
 這是前端是否理解後端契約的基本表現。
+
+#### 分類錯誤處理範例
+
+```javascript
+function handleApiError(error) {
+  var msgEl = document.getElementById("errorMessage");
+
+  if (!error.response) {
+    // 網路錯誤：請求根本沒送出（或後端未啟動）
+    msgEl.textContent = "網路錯誤，請確認後端服務是否启動";
+    return;
+  }
+
+  switch (error.response.status) {
+    case 400:
+      msgEl.textContent = "請求格式錯誤：" + (error.response.data.message || "請檢查輸入");
+      break;
+    case 401:
+      msgEl.textContent = "未登入或 token 已過期，請重新登入";
+      // 可選擇自動導回登入頁
+      // window.location.href = "/login";
+      break;
+    case 404:
+      msgEl.textContent = "查無此筆資料，請確認輸入是否正確";
+      break;
+    case 500:
+      msgEl.textContent = "伺服器內部錯誤，請聯繫系統管理員";
+      break;
+    default:
+      msgEl.textContent = "HTTP " + error.response.status + "：操作失敗";
+  }
+}
+```
 
 ### Step 3：API base path 與環境切換
 

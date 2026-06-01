@@ -49,6 +49,26 @@ JSP 本身不是資料來源，它是顯示層。這一點要先講清楚：
 
 如果學員一開始就把 JSP 當成業務邏輯執行點，後面就會一直把不該放在頁面的判斷塞進去。
 
+#### 完整請求流程與各層對應
+
+```
+瀏覽器
+  │  GET /policy-dashboard?policyNo=PL20240001
+  ▼
+DispatcherServlet（Spring MVC 前端控制器）
+  │  比對 @GetMapping
+  ▼
+PolicyController.policyDashboard()
+  │  呼叫 service 取資料
+  │  model.addAttribute("policy", policySummary)
+  │  return "policy-dashboard"（邏輯視圖名稱）
+  ▼
+ViewResolver → /WEB-INF/views/policy-dashboard.jsp
+  │  JSP 讀取 request attribute 產生 HTML
+  ▼
+瀏覽器收到完整 HTML（伺服器端渲染完成）
+```
+
 ### Step 2：理解 JSP 在容器中的角色
 
 JSP 不是單純 HTML 檔。它在執行時會由 servlet container 轉譯成 servlet 類型後執行，這也是為什麼它屬於伺服器端渲染。
@@ -80,6 +100,62 @@ public String policyDashboard(Model model) {
 <p>狀態：${policy.status}</p>
 ```
 
+### 加上 JSTL 的完整 JSP 頁範例
+
+以下是一個更接近真實現場的 `policy-dashboard.jsp`，包含 JSTL 條件判斷、迴圈與 EL 表達式：
+
+```jsp
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>保單儀表板</title>
+</head>
+<body>
+
+<h2>保戶：${sessionScope.loginUser.displayName}，您好</h2>
+
+<!-- 條件顯示警告 -->
+<c:if test="${policy.status == 'EXPIRED'}">
+  <div class="alert alert-warning">此保單已到期，請聯繫客服。</div>
+</c:if>
+
+<!-- 保單基本資料 -->
+<table border="1">
+  <tr><th>保單號碼</th><td>${policy.policyNo}</td></tr>
+  <tr><th>保戶姓名</th><td>${policy.holderName}</td></tr>
+  <tr><th>險種</th>    <td>${policy.productName}</td></tr>
+  <tr><th>狀態</th>    <td>${policy.status}</td></tr>
+</table>
+
+<!-- 理賠紀錄列表 -->
+<h3>理賠紀錄 (共 ${fn:length(policy.claims)} 筆)</h3>
+<c:choose>
+  <c:when test="${empty policy.claims}">
+    <p>目前無理賠紀錄。</p>
+  </c:when>
+  <c:otherwise>
+    <ul>
+      <c:forEach var="claim" items="${policy.claims}">
+        <li>${claim.claimNo} — ${claim.status} — ${claim.submittedAt}</li>
+      </c:forEach>
+    </ul>
+  </c:otherwise>
+</c:choose>
+
+</body>
+</html>
+```
+
+**說明**：
+- `<%@ taglib %>` 宣告必須在頁面頂端，否則 JSTL 標籤無效。
+- `${sessionScope.loginUser.displayName}` 讀取 session scope 中的登入使用者，而非 request scope。
+- `${policy.claims}` 是 controller 透過 `model.addAttribute` 放進 request 的 List。
+- `<c:if>`、`<c:choose>`、`<c:forEach>` 是 JSTL Core 標籤，負責條件與迴圈，讓 JSP 避免直接使用 Java scriptlet（`<% %>`）。
+
 ### Step 3：追資料來源時應該怎麼找
 
 建議教學員固定按這個順序排查：
@@ -90,11 +166,62 @@ public String policyDashboard(Model model) {
 
 這比直接從 JSP 一路硬讀到底有效得多。
 
+#### 維運排查實例
+
+情境：`${policy.holderName}` 畫面顯示空白。
+
+```
+排查步驟：
+1. JSP 找到 ${policy.holderName}
+2. 回 controller 找 model.addAttribute("policy", ...)
+   → 發現是 policyFacade.getPolicySummary(policyNo) 的回傳值
+3. 進 PolicyFacade → PolicyService → PolicyMapper
+   → 發現 SQL 查此欄位用的是 holder_name，但 Java DTO 中欄位叫 name（對不上）
+4. 修正 DTO 欄位名稱或加 @JsonProperty / MyBatis resultMap 對應
+```
+
+> 重點：「畫面空白」不等於 JSP 壞了，很多時候是 Java 物件欄位名稱對不上 SQL 欄位。
+
 ## scope 差異
 
 - request scope：一次請求有效，適合單頁顯示資料
 - session scope：跨多次請求有效，適合登入資訊或短期會話資料
 - application scope：整個應用程式共用，通常不用來放使用者專屬資訊
+
+#### scope 存取對照
+
+```java
+// Controller 放資料的方式
+
+// 1. request scope（放進 Model）
+model.addAttribute("policy", policySummary);     // JSP 用 ${policy.xxx}
+
+// 2. session scope（放進 HttpSession）
+HttpSession session = request.getSession();
+session.setAttribute("loginUser", currentUser);  // JSP 用 ${sessionScope.loginUser.xxx}
+
+// 3. session scope 用 Spring @SessionAttributes（Spring MVC 風格）
+@SessionAttributes("loginUser")
+@Controller
+public class AuthController { ... }
+```
+
+```jsp
+<%-- JSP 內讀取各種 scope --%>
+
+<%-- request scope（最常用，model.addAttribute 的資料） --%>
+<p>${requestScope.policy.policyNo}</p>
+<%-- 簡寫同效果（EL 會自動往 request → session → application 尋找） --%>
+<p>${policy.policyNo}</p>
+
+<%-- session scope（跨頁保留的值，例如登入使用者） --%>
+<p>歡迎，${sessionScope.loginUser.displayName}</p>
+
+<%-- 判斷是否已登入 --%>
+<c:if test="${empty sessionScope.loginUser}">
+  <a href="/login">請先登入</a>
+</c:if>
+```
 
 ### Step 4：scope 不是名詞題，而是資料生命週期設計
 

@@ -97,26 +97,156 @@
 
 ## API 契約草案示例
 
-```yaml
-paths:
-	/api/claims/{claimNo}:
-		get:
-			summary: 查詢理賠案件狀態
-			responses:
-				'200':
-					description: success
-				'404':
-					description: claim not found
+以下是一份接近實際交付的 OpenAPI 3.0 YAML，包含 request body、response schema 和防御表示範例：
 
-	/api/claims/{claimNo}/documents:
-		post:
-			summary: 新增補件資訊
-			responses:
-				'201':
-					description: created
-				'400':
-					description: invalid request
+```yaml
+openapi: "3.0.3"
+info:
+  title: 保全整合平台 API
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8082
+
+paths:
+  /api/auth/login:
+    post:
+      summary: 使用者登入
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: 登入成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiJ9...
+        "401":
+          description: 帳號或密碼錯誤
+
+  /api/claims/{claimNo}:
+    get:
+      summary: 查詢理賠案件狀態
+      tags: [Claims]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: claimNo
+          in: path
+          required: true
+          schema:
+            type: string
+          example: CLM20240001
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimDetail"
+        "401":
+          description: 未登入
+        "404":
+          description: 查無此理賠案件
+
+  /api/claims/{claimNo}/documents:
+    post:
+      summary: 新增補件資訊
+      tags: [Claims]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: claimNo
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [docType, docUrl]
+              properties:
+                docType:
+                  type: string
+                  enum: [ID_CARD, MEDICAL_CERTIFICATE, DIAGNOSIS_REPORT]
+                docUrl:
+                  type: string
+                  example: https://storage.example.com/doc/abc.pdf
+                remark:
+                  type: string
+      responses:
+        "201":
+          description: 補件建立成功
+        "400":
+          description: 請求格式錯誤
+        "404":
+          description: 查無此理賠案件
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ClaimDetail:
+      type: object
+      properties:
+        claimNo:
+          type: string
+        status:
+          type: string
+          enum: [SUBMITTED, REVIEWING, APPROVED, REJECTED]
+        submittedAt:
+          type: string
+          format: date-time
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              docType:
+                type: string
+              docUrl:
+                type: string
+              uploadedAt:
+                type: string
+                format: date-time
 ```
+
+此 YAML 可直接貼入 Swagger Editor（swagger.io/editor）預覽或交給 Spring Boot（springdoc-openapi）讀取。
+
+#### 里程碑與走期清單範例
+
+專題啟動文件应包含一張可操作的里程碑表，不能只有日期：
+
+| 里程碑 | 日期 | 交付物 | 狀態 |
+|---|---|---|---|
+| M0 Kickoff | Week 1 | 啟動文件、視圖名稱對照表 | 待辦 |
+| M1 API 契約凍結 | Week 2 | OpenAPI YAML + Postman collection | 待辦 |
+| M2 核心配件 | Week 3–4 | 前後端基礎整合可通 | 待辦 |
+| M3 功能完成 | Week 5–6 | 主要流程可展示 | 待辦 |
+| M4 驗收交付 | Week 7 | 進行骗收測試、評分 | 待辦 |
 
 ### Step 4：API 契約至少要先定四件事
 
